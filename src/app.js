@@ -299,7 +299,8 @@ async function shareQuiz(quiz, button) {
   url.search = '';
   url.hash = '';
   if (!quiz.shareToken) throw new Error('Salve o teste na sua conta antes de compartilhar.');
-  url.searchParams.set('test', quiz.shareToken);
+  const token = await cloud.request('/rest/v1/rpc/foco_create_link', { method: 'POST', body: { p_quiz_id: quiz.id } });
+  url.searchParams.set('test', token);
   try {
     await navigator.clipboard.writeText(url.toString());
     if (button) {
@@ -307,7 +308,7 @@ async function shareQuiz(quiz, button) {
       button.textContent = 'Link copiado ✓'; button.classList.add('copied');
       setTimeout(() => { button.innerHTML = original; button.classList.remove('copied'); }, 2500);
     }
-    toast('Link copiado. O gabarito não vai junto.');
+    toast('Link individual copiado. Válido por 10 minutos para iniciar; uma única tentativa.');
   } catch {
     window.prompt('Copie o link do teste:', url.toString());
   }
@@ -330,9 +331,22 @@ function beginTest(quiz, preview = false) {
   render();
   window.scrollTo({ top: 0 });
 }
-function startAttempt(form) {
+async function startAttempt(form) {
   const name = new FormData(form).get('participant')?.toString().trim();
   if (!name) { form.querySelector('[name="participant"]')?.focus(); return; }
+  if (state.shareToken) {
+    const button = form.querySelector('button[type="submit"]');
+    if (button?.disabled) return;
+    if (button) button.disabled = true;
+    try {
+      const shared = await cloud.rpc('foco_start', { p_token: state.shareToken, p_participant: name });
+      state.activeQuiz = shared.quiz; state.revision = shared.revision;
+      restoreAttempt({ attempt: shared.attempt, revision: shared.revision, examIndex: 0, view: 'exam' });
+      render();
+    } catch (error) { toast(error.message, 'error'); }
+    finally { if (button) button.disabled = false; }
+    return;
+  }
   const start = new Date();
   state.attempt = {
     id: uid(), quizId: state.activeQuiz.id, quizTitle: state.activeQuiz.title,
@@ -345,12 +359,19 @@ function startAttempt(form) {
   upsertAttempt();
   render();
 }
+let draftSave = Promise.resolve();
 function upsertAttempt() {
   if (!state.attempt || state.previewMode) return;
   if (state.shareToken) {
     const pending = readStore(KEYS.pending, []).filter(item => item.attempt?.id !== state.attempt.id);
     pending.push({ token: state.shareToken, revision: state.revision, attempt: clone(state.attempt), examIndex: state.examIndex, view: state.view });
     state.localSaved = writeStore(KEYS.pending, pending);
+    if (!state.attempt.submittedAt) {
+      const token = state.shareToken; const attempt = clone(state.attempt);
+      draftSave = draftSave.catch(() => {}).then(() => cloud.rpc('foco_save', { p_token: token, p_attempt: attempt })).catch(() => {
+        toast('Respostas salvas neste navegador. Sem conexão, mantenha a página aberta.', 'error');
+      });
+    }
   } else {
     const local = readStore(KEYS.attempts, []).filter(item => item.id !== state.attempt.id);
     local.unshift({ ...clone(state.attempt), examIndex: state.examIndex, view: state.view }); state.localSaved = writeStore(KEYS.attempts, local);
@@ -423,7 +444,8 @@ function updateExamIndicators() {
 }
 function renderIntro() {
   const quiz = state.activeQuiz;
-  const content = `<div class="participant-page"><header class="participant-top">${brand()}<span class="pill">${state.previewMode ? 'PRÉVIA' : 'AVALIAÇÃO'}</span></header><main class="participant-content"><div class="intro-meta"><span class="pill blue">${state.previewMode ? 'MODO DE PRÉVIA' : 'SESSÃO CRONOMETRADA'}</span><span class="mono-label">${quiz.questions.length} ${quiz.questions.length === 1 ? 'PERGUNTA' : 'PERGUNTAS'}</span></div><h1>${escapeHtml(quiz.title)}</h1><p>${escapeHtml(quiz.instructions || 'Leia cada pergunta com atenção e responda no seu ritmo. O tempo total aparece durante a avaliação.')}</p><section class="intro-card"><div class="intro-facts"><div class="intro-fact"><strong>${Number(quiz.durationMinutes)} min</strong><span>tempo total</span></div><div class="intro-fact"><strong>${quiz.questions.filter(q => q.type === 'multiple').length}</strong><span>objetivas</span></div><div class="intro-fact"><strong>${quiz.questions.filter(q => q.type === 'free').length}</strong><span>abertas</span></div></div><form id="participant-form"><div class="field"><label for="participant-name">Seu nome</label><input class="input" id="participant-name" name="participant" required maxlength="80" autocomplete="name" placeholder="Como podemos identificar sua resposta?"></div><button class="button primary wide" type="submit">Começar avaliação <span class="button-icon">→</span></button></form><div class="privacy-note"><strong>O que é registrado:</strong> mudanças de aba, perda de foco da janela e cliques fora da área do teste. Nenhuma imagem, áudio ou conteúdo de outras janelas é capturado. Esses sinais podem ter falso positivo e não provam uma intenção.</div></section></main></div>`;
+  const questions = quiz.questions || [];
+  const content = `<div class="participant-page"><header class="participant-top">${brand()}<span class="pill">${state.previewMode ? 'PRÉVIA' : 'AVALIAÇÃO'}</span></header><main class="participant-content"><div class="intro-meta"><span class="pill blue">${state.previewMode ? 'MODO DE PRÉVIA' : 'SESSÃO CRONOMETRADA'}</span><span class="mono-label">${quiz.questionCount ?? questions.length} ${questions.length === 1 ? 'PERGUNTA' : 'PERGUNTAS'}</span></div><h1>${escapeHtml(quiz.title)}</h1><p>${escapeHtml(quiz.instructions || 'Leia cada pergunta com atenção e responda no seu ritmo. O tempo total aparece durante a avaliação.')}</p><section class="intro-card"><div class="intro-facts"><div class="intro-fact"><strong>${Number(quiz.durationMinutes)} min</strong><span>tempo total</span></div><div class="intro-fact"><strong>${quiz.multipleCount ?? questions.filter(q => q.type === 'multiple').length}</strong><span>objetivas</span></div><div class="intro-fact"><strong>${quiz.freeCount ?? questions.filter(q => q.type === 'free').length}</strong><span>abertas</span></div></div><form id="participant-form"><div class="field"><label for="participant-name">Seu nome</label><input class="input" id="participant-name" name="participant" required maxlength="80" autocomplete="name" placeholder="Como podemos identificar sua resposta?"></div><button class="button primary wide" type="submit">Começar avaliação <span class="button-icon">→</span></button></form><div class="privacy-note"><strong>O que é registrado:</strong> mudanças de aba, perda de foco da janela e cliques fora da área do teste. Nenhuma imagem, áudio ou conteúdo de outras janelas é capturado. Esses sinais podem ter falso positivo e não provam uma intenção.</div></section></main></div>`;
   app.innerHTML = content;
 }
 function renderExam() {
@@ -477,6 +499,7 @@ async function sendAttempt() {
   if (state.sending || state.previewMode || !state.shareToken || !state.attempt?.submittedAt) return;
   state.sending = true; state.delivery = 'sending'; state.deliveryError = ''; render();
   try {
+    await draftSave;
     const accepted = await cloud.rpc('foco_submit', { p_token: state.shareToken, p_revision: state.revision, p_attempt: state.attempt });
     if (accepted !== true) throw new Error('A entrega não foi confirmada. Tente novamente.');
     state.delivery = 'sent';
@@ -826,13 +849,14 @@ async function boot() {
         if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(token)) throw new Error('Link inválido. Peça um novo link ao avaliador.');
         state.shareToken = token;
         const pending = readStore(KEYS.pending, []).filter(item => item.token === token).at(-1);
-        if (restoreAttempt(pending)) {
-          // The saved snapshot keeps the original questions and deadline.
-        } else {
-          const shared = await cloud.rpc('foco_public_test', { p_token: token });
-          if (version !== state.authVersion) return;
-          if (!shared || !validateQuiz(shared.quiz)) throw new Error('Avaliação indisponível. Peça um novo link ao avaliador.');
-          state.activeQuiz = shared.quiz; state.revision = shared.revision; state.attempt = null; state.view = 'participant-intro';
+        const shared = await cloud.rpc('foco_public_test', { p_token: token });
+        if (version !== state.authVersion) return;
+        if (!shared?.quiz) throw new Error('Avaliação indisponível. Peça um novo link ao avaliador.');
+        state.activeQuiz = shared.quiz; state.revision = shared.revision; state.attempt = null; state.view = 'participant-intro';
+        if (shared.attempt) {
+          const local = pending?.attempt?.id === shared.attempt.id ? pending : null;
+          const attempt = { ...shared.attempt, ...(local ? { responses: local.attempt.responses, events: local.attempt.events } : {}) };
+          restoreAttempt({ attempt, revision: shared.revision, examIndex: local?.examIndex || 0, view: local?.view || 'exam' });
         }
       } else {
         const shared = decodeBase64Url(encoded);

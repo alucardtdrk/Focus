@@ -4,7 +4,9 @@ tests/.postgres-check/
 .env.*
 !.env.example
 .vercel/
-supabase/
+supabase/*
+!supabase/individual-links.sql
+!supabase/individual-links-check.sql
 SETUP.md
 TODO.md
 plan.md

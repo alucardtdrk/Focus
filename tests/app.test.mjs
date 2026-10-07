@@ -122,6 +122,8 @@ const resumeToken = '12345678-1234-1234-1234-123456789abc';
 run("state.previewMode=false; state.shareToken='12345678-1234-1234-1234-123456789abc'; state.revision='original'; state.activeQuiz=EXAMPLE; state.attempt={id:'resume',quizId:EXAMPLE.id,participant:'Pessoa',startedAt:new Date().toISOString(),deadline:Date.now()+60000,submittedAt:null,responses:{'ex-q3':'Resposta preservada'},events:[],quizSnapshot:publicQuiz(EXAMPLE)}; state.examIndex=2; state.view='review'; upsertAttempt();");
 const originalDeadline = run('state.attempt.deadline');
 context.window.location.search = '?test=' + resumeToken;
+const originalRpc = cloud.rpc;
+cloud.rpc = async (name, body) => name === 'foco_public_test' ? JSON.parse(run('JSON.stringify({quiz:publicQuiz(EXAMPLE),revision:"original",attempt:state.attempt})')) : originalRpc(name, body);
 await run('boot()');
 assert.equal(run('state.view'), 'review');
 assert.equal(run('state.examIndex'), 2);
@@ -248,3 +250,29 @@ assert.equal(disclosure.open,true);assert.equal(disclosure.inert,false);assert.e
 await run('handleClick('+disclosureEvent+')');
 assert.equal(disclosure.open,false);assert.equal(disclosure.inert,true);assert.equal(disclosureButton.attrs['aria-expanded'],'false');
 console.log('Painel expansível: abertura, fechamento e acessibilidade OK');
+
+// The server owns identity and time even after local data is cleared.
+context.FormData = class { get() { return 'Pessoa'; } };
+const serverAttempt = JSON.parse(run('JSON.stringify({id:"individual",quizId:EXAMPLE.id,participant:"Pessoa",startedAt:new Date().toISOString(),deadline:Date.now()+60000,submittedAt:null,responses:{},events:[],quizSnapshot:publicQuiz(EXAMPLE)})'));
+cloud.rpc = async (name, body) => {
+  calls.push({name,body});
+  if (name === 'foco_start' || name === 'foco_public_test') return {quiz:serverAttempt.quizSnapshot,revision:'server-revision',attempt:serverAttempt};
+  return true;
+};
+run('state.shareToken="12345678-1234-1234-1234-123456789abc"; state.previewMode=false; state.attempt=null; state.activeQuiz={id:"intro",title:"Teste",durationMinutes:1,questionCount:3,multipleCount:2,freeCount:1}; renderIntro()');
+assert.match(root.innerHTML,/3 PERGUNTAS/);
+const form = {querySelector: () => ({disabled:false})};
+context.participantForm = form;
+await run('startAttempt(participantForm)');
+assert.equal(run('state.attempt.id'),'individual');
+assert.equal(run('state.revision'),'server-revision');
+data.delete('foco.pending.v1');
+context.window.location.search='?test=12345678-1234-1234-1234-123456789abc';
+await run('boot()');
+assert.equal(run('state.attempt.deadline'),serverAttempt.deadline);
+assert.equal(run('state.attempt.id'),'individual');
+cloud.rpc = async () => {throw new Error('Esta avaliação já foi finalizada.');};
+await run('boot()');
+assert.equal(run('state.view'),'link-error');
+assert.match(root.innerHTML,/já foi finalizada/);
+console.log('Link individual: início no servidor, retomada sem dados locais e bloqueio após entrega OK');
