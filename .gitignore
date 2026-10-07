@@ -10,3 +10,6 @@ TODO.md
 plan.md
 supabase-design.md
 supabase-plan.md
+
+.vercel
+.env*

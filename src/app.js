@@ -26,7 +26,7 @@ function writeStore(key, value) {
 
 const state = {
   view: 'dashboard', tests: [], attempts: [], editor: null, editorIsNew: false,
-  activeQuiz: null, examIndex: 0, attempt: null, previewMode: false,
+  activeQuiz: null, examIndex: 0, attempt: null, previewMode: false, questionAnimating: false,
   selectedAttemptId: null, examTimer: null, toastTimer: null, bootError: '',
   user: null, loading: false, accountError: '', authVersion: 0,
   shareToken: null, revision: null, delivery: '', deliveryError: '', sending: false,
@@ -154,7 +154,7 @@ function brand(compact = false) {
 function themeButton() {
   const dark = document.documentElement.dataset.theme === 'dark';
   const label = dark ? 'Ativar modo claro' : 'Ativar modo escuro';
-  return `<button class="theme-toggle" data-action="toggle-theme" type="button" aria-label="${label}" title="${label}" aria-pressed="${dark}"><svg class="theme-icon moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13.5A8.5 8.5 0 0 1 10.5 3.5a8.5 8.5 0 1 0 10 10Z"/></svg><svg class="theme-icon sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button>`;
+  return `<button class="theme-toggle" data-action="toggle-theme" data-tooltip="${label}" type="button" aria-label="${label}" aria-pressed="${dark}"><svg class="theme-icon moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M20.5 13.5A8.5 8.5 0 0 1 10.5 3.5a8.5 8.5 0 1 0 10 10Z"/></svg><svg class="theme-icon sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></button>`;
 }
 function renderLoading() {
   return `<div class="loading-page"><header class="loading-header">${brand()}</header><main class="loading-content" role="status" aria-live="polite" aria-busy="true"><div class="loader-orbit" aria-hidden="true"><span></span>${brandMark()}</div><span class="eyebrow">UM MOMENTO DE FOCO</span><h1>Preparando seu espaço.</h1><p>${new URLSearchParams(window.location.search).has('test') ? 'Estamos abrindo sua avaliação.' : 'Estamos buscando seus testes e resultados.'}</p><div class="loading-preview" aria-hidden="true"><div class="skeleton-heading"></div><div class="skeleton-cards"><span></span><span></span><span></span></div><div class="skeleton-row"></div><div class="skeleton-row"></div></div><span class="loading-caption">Tudo pronto para continuar, em instantes.</span></main></div>`;
@@ -176,23 +176,36 @@ function displayTestName(id, fallback = 'Teste importado') { return state.tests.
 
 function shell(content, active = 'dashboard', topRight = '') {
   const navItems = [
-    ['dashboard', '▦', 'Avaliações'], ['results', '◷', 'Resultados'], ['guide', '⌘', 'Como funciona'],
+    ['dashboard', '<rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/>', 'Avaliações'],
+    ['results', '<path d="M5 20V10m7 10V4m7 16v-7"/><path d="M3 21h18"/>', 'Resultados'],
+    ['guide', '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4m0 3h.01"/>', 'Como funciona'],
   ];
-  return `<div class="app-shell"><aside class="sidebar">${brand()}<div class="side-label">ÁREA DO AVALIADOR</div><nav class="side-nav" aria-label="Navegação principal">${navItems.map(([key, icon, label]) => `<button class="nav-link ${active === key ? 'active' : ''}" type="button" data-action="navigate" data-view="${key}" aria-current="${active === key ? 'page' : 'false'}"><span class="nav-icon" aria-hidden="true">${icon}</span><span class="nav-text">${label}</span></button>`).join('')}</nav></aside><main class="workspace"><header class="topbar"><span class="topbar-label">${active === 'results' ? 'REVISÃO DE TENTATIVAS' : active === 'guide' ? 'GUIA RÁPIDO' : 'SESSÕES DE AVALIAÇÃO'}</span><div class="topbar-actions">${topRight}<button class="button ghost small" type="button" data-action="logout">Sair</button></div></header><div class="page-content">${state.accountError ? `<p class="account-error" role="alert">${escapeHtml(state.accountError)} <button class="button secondary small" data-action="refresh-results" type="button">Tentar novamente</button></p>` : ""}${content}</div></main></div>`;
+  return `<div class="app-shell"><aside class="sidebar">${brand()}<div class="side-label">ÁREA DO AVALIADOR</div><nav class="side-nav" aria-label="Navegação principal">${navItems.map(([key, icon, label]) => `<button class="nav-link ${active === key ? 'active' : ''}" type="button" data-action="navigate" data-view="${key}" data-tooltip="${label}" aria-label="${label}" title="${label}" aria-current="${active === key ? 'page' : 'false'}"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></span><span class="nav-text">${label}</span></button>`).join('')}</nav></aside><main class="workspace"><header class="topbar"><span class="topbar-label">${active === 'results' ? 'REVISÃO DE TENTATIVAS' : active === 'guide' ? 'GUIA RÁPIDO' : 'SESSÕES DE AVALIAÇÃO'}</span><div class="topbar-actions"><span class="mobile-theme">${themeButton()}</span>${topRight}<button class="button ghost small" type="button" data-action="logout">Sair</button></div></header><div class="page-content">${state.accountError ? `<p class="account-error" role="alert">${escapeHtml(state.accountError)} <button class="button secondary small" data-action="refresh-results" type="button">Tentar novamente</button></p>` : ""}${content}</div></main></div>`;
 }
 function topActions() {
   return '<button class="button secondary small" type="button" data-action="refresh-results">Atualizar</button>';
 }
+function searchText(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+function searchField(label) {
+  return `<div class="list-search"><label for="list-search">${label}</label><div class="search-input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input class="input" id="list-search" type="search" placeholder="${label}" autocomplete="off"></div><p id="search-count" role="status"></p></div>`;
+}
+function filterList(value) {
+  const query = searchText(value.trim());
+  let visible = 0;
+  document.querySelectorAll('[data-search]').forEach(row => { row.hidden = !searchText(row.dataset.search).includes(query); if (!row.hidden) visible++; });
+  const status = document.querySelector('#search-count');
+  if (status) status.textContent = query ? (visible ? `${visible} resultado(s) encontrado(s)` : 'Nenhum resultado. Tente outro nome.') : '';
+}
 function testRow(test) {
   const count = test.questions?.length || 0;
   const attemptsForTest = state.attempts.filter(item => item.quizId === test.id).length;
-  return `<article class="test-row"><div><div class="test-title-line"><h3>${escapeHtml(test.title || 'Teste sem título')}</h3>${test.isExample ? '<span class="pill lime">DEMONSTRAÇÃO</span>' : ''}</div><div class="test-meta"><span>${count} ${count === 1 ? 'pergunta' : 'perguntas'}</span><span class="separator">•</span><span>${Number(test.durationMinutes) || 1} min</span><span class="separator">•</span><span>${attemptsForTest} ${attemptsForTest === 1 ? 'tentativa' : 'tentativas'}</span></div></div><div class="test-actions"><button class="button ghost small" type="button" data-action="edit-test" data-id="${escapeHtml(test.id)}">Editar</button><button class="button secondary small" type="button" data-action="share-test" data-id="${escapeHtml(test.id)}">Compartilhar</button><button class="button ghost small" type="button" data-action="preview-test" data-id="${escapeHtml(test.id)}">Prévia</button><button class="button ghost small" type="button" data-action="test-menu" data-id="${escapeHtml(test.id)}" aria-label="Mais opções para ${escapeHtml(test.title)}">•••</button></div><div class="test-extra hidden" id="extra-${escapeHtml(test.id)}"><button class="button ghost small" data-action="export-test" data-id="${escapeHtml(test.id)}" type="button">Baixar teste</button><button class="button ghost small" data-action="duplicate-test" data-id="${escapeHtml(test.id)}" type="button">Duplicar</button><button class="button danger small" data-action="delete-test" data-id="${escapeHtml(test.id)}" type="button">Excluir</button></div></article>`;
+  return `<article class="test-row" data-search="${escapeHtml(test.title)}"><div class="test-card-heading"><span class="test-card-icon" aria-hidden="true">▤</span><div><div class="test-title-line"><h3>${escapeHtml(test.title || 'Teste sem título')}</h3>${test.isExample ? '<span class="pill lime">DEMONSTRAÇÃO</span>' : ''}</div><div class="test-meta"><span>${count} ${count === 1 ? 'pergunta' : 'perguntas'}</span><span class="separator">•</span><span>${Number(test.durationMinutes) || 1} min</span><span class="separator">•</span><span>${attemptsForTest} ${attemptsForTest === 1 ? 'tentativa' : 'tentativas'}</span></div></div></div><div class="test-actions"><button class="button ghost small" type="button" data-action="edit-test" data-id="${escapeHtml(test.id)}">Editar</button><button class="button secondary small" type="button" data-action="share-test" data-id="${escapeHtml(test.id)}">Copiar link</button><button class="button ghost small" type="button" data-action="preview-test" data-id="${escapeHtml(test.id)}">Prévia</button><button class="button ghost small" type="button" data-action="test-menu" data-id="${escapeHtml(test.id)}" data-tooltip="Mais opções" aria-expanded="false" aria-controls="extra-${escapeHtml(test.id)}" aria-label="Mais opções para ${escapeHtml(test.title)}">•••</button></div><div class="test-extra disclosure-panel" id="extra-${escapeHtml(test.id)}" inert><div class="disclosure-content"><button class="button ghost small" data-action="export-test" data-id="${escapeHtml(test.id)}" type="button">Baixar teste</button><button class="button ghost small" data-action="duplicate-test" data-id="${escapeHtml(test.id)}" type="button">Duplicar</button><button class="button danger small" data-action="delete-test" data-id="${escapeHtml(test.id)}" type="button">Excluir</button></div></div></article>`;
 }
 function renderDashboard() {
   const testList = state.tests.length
     ? `<div class="test-list">${[...state.tests].sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0)).map(testRow).join('')}</div>`
     : `<div class="empty-state"><div class="empty-symbol">＋</div><h3>O primeiro teste começa aqui.</h3><p>Adicione perguntas, escolha o tempo e compartilhe um link quando estiver pronto.</p><button class="button primary" data-action="new-test" type="button">Criar primeiro teste</button></div>`;
-  const content = `<section class="page-intro"><div><span class="eyebrow">AVALIAÇÃO SEM OPERAÇÃO</span><h1>Avalie com clareza.<br><em>Sem complicar.</em></h1><p>Monte um teste, compartilhe um link e revise as respostas no seu tempo. Os participantes respondem pelo link e as entregas chegam à sua conta.</p></div><aside class="hero-aside"><span class="aside-number">01 / ONLINE</span><strong>Um teste. Um link.</strong><p>Avaliações e resultados ficam na sua conta. As respostas chegam automaticamente.</p></aside></section><div class="metric-row"><article class="metric-card"><div class="metric-label">Testes guardados</div><div class="metric-value">${state.tests.length}<small>na sua conta</small></div></article><article class="metric-card"><div class="metric-label">Tentativas recebidas</div><div class="metric-value">${state.attempts.length}<small>recebidas online</small></div></article><article class="metric-card"><div class="metric-label">Sinais de perda de foco</div><div class="metric-value">${allFocusEvents()}<small>em todas as tentativas</small></div></article></div><section><div class="section-heading"><div><h2>Seus testes</h2><p>Edite, compartilhe ou faça uma prévia antes de enviar.</p></div><button class="button primary" type="button" data-action="new-test"><span class="button-icon">＋</span>Criar teste</button></div>${testList}</section><div class="page-footnote"><span aria-hidden="true">↗</span><span><strong>Privacidade, sem letra miúda.</strong> O Foco registra mudanças de aba, perda de foco da janela e cliques fora da área da prova. Isso são sinais técnicos — não uma prova de fraude.</span></div>`;
+  const content = `<section class="page-intro"><div><span class="eyebrow">AVALIAÇÃO SEM OPERAÇÃO</span><h1>Avalie com clareza.<br><em>Sem complicar.</em></h1><p>Monte um teste, compartilhe um link e revise as respostas no seu tempo. Os participantes respondem pelo link e as entregas chegam à sua conta.</p></div><aside class="hero-aside"><span class="aside-number">01 / ONLINE</span><strong>Um teste. Um link.</strong><p>Avaliações e resultados ficam na sua conta. As respostas chegam automaticamente.</p></aside></section><div class="metric-row"><article class="metric-card"><div class="metric-label">Testes guardados</div><div class="metric-value">${state.tests.length}<small>na sua conta</small></div></article><article class="metric-card"><div class="metric-label">Tentativas recebidas</div><div class="metric-value">${state.attempts.length}<small>recebidas online</small></div></article><article class="metric-card"><div class="metric-label">Sinais de perda de foco</div><div class="metric-value">${allFocusEvents()}<small>em todas as tentativas</small></div></article></div><section><div class="section-heading"><div><h2>Seus testes</h2><p>Edite, compartilhe ou faça uma prévia antes de enviar.</p></div><button class="button primary" type="button" data-action="new-test"><span class="button-icon">＋</span>Criar teste</button></div>${state.tests.length ? searchField('Buscar avaliações') : ''}${testList}</section><div class="page-footnote"><span aria-hidden="true">↗</span><span><strong>Privacidade, sem letra miúda.</strong> O Foco registra mudanças de aba, perda de foco da janela e cliques fora da área da prova. Isso são sinais técnicos — não uma prova de fraude.</span></div>`;
   return shell(`<div class="dashboard-content">${content}</div>`, 'dashboard', topActions());
 }
 
@@ -214,7 +227,7 @@ function renderQuestionEditor(question, index) {
 function renderEditor() {
   const quiz = state.editor;
   const isNew = state.editorIsNew;
-  const content = `<div class="editor-top"><div><span class="eyebrow">${isNew ? 'NOVA AVALIAÇÃO' : 'EDITAR AVALIAÇÃO'}</span><h1>${isNew ? 'Vamos preparar o teste.' : escapeHtml(quiz.title || 'Editar teste')}</h1></div><button class="button ghost" type="button" data-action="navigate" data-view="dashboard">← Voltar</button></div><div class="editor-layout"><div class="editor-main"><section class="editor-card"><div class="card-heading"><div><h2>Informações do teste</h2><p>O básico para o participante saber o que esperar.</p></div><span class="pill">01 / CONFIGURAÇÃO</span></div><div class="field"><label for="quiz-title">Nome do teste</label><input class="input" id="quiz-title" data-editor-field="title" maxlength="90" value="${escapeHtml(quiz.title)}" placeholder="Ex.: Avaliação inicial — atendimento"></div><div class="field"><label for="quiz-instructions">Instruções para o participante <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><textarea class="textarea" id="quiz-instructions" data-editor-field="instructions" maxlength="600" placeholder="Explique como responder, o que pode consultar e qualquer contexto importante…">${escapeHtml(quiz.instructions || '')}</textarea></div><div class="field-grid"><div class="field"><span class="field-label">Formato</span><div class="field-hint">Questões objetivas com gabarito e perguntas abertas na mesma avaliação.</div></div><div class="field"><label for="quiz-duration">Tempo total</label><div class="duration-input"><input class="input" id="quiz-duration" type="number" min="1" max="180" step="1" data-editor-field="durationMinutes" value="${Number(quiz.durationMinutes) || 20}"><span>min</span></div></div></div></section><section><div class="question-section-heading"><div><h2>Perguntas</h2><p>${quiz.questions.length} ${quiz.questions.length === 1 ? 'pergunta na sequência' : 'perguntas na sequência'}</p></div><button class="button secondary small" type="button" data-action="add-question"><span class="button-icon">＋</span>Adicionar pergunta</button></div><div class="question-stack">${quiz.questions.map(renderQuestionEditor).join('')}</div></section><div class="editor-savebar"><p>Salvo na sua conta. O link compartilhado não revela o gabarito.</p><div class="editor-save-actions"><button class="button secondary" type="button" data-action="save-editor">Salvar teste</button><button class="button primary" type="button" data-action="save-share"><span class="button-icon">↗</span>Salvar e compartilhar</button></div></div></div><aside class="editor-aside"><div class="editor-aside-card"><h3>Uma configuração pequena, mas suficiente.</h3><ul class="editor-checklist"><li><span class="check-dot">✓</span><span>Selecione múltipla escolha ou resposta livre em cada pergunta.</span></li><li><span class="check-dot">✓</span><span>Marque a resposta correta nas perguntas objetivas.</span></li><li><span class="check-dot">✓</span><span>O cronômetro vale para o teste todo e entrega ao chegar a zero.</span></li><li><span class="check-dot">✓</span><span>Faça uma prévia antes de copiar o link.</span></li></ul></div><div class="editor-aside-card"><h3>Gabarito protegido no link</h3><p>O arquivo/link enviado ao participante contém enunciados e alternativas, mas não as respostas corretas. O gabarito fica protegido na conta do avaliador.</p></div></aside></div>`;
+  const content = `<div class="editor-top"><div><span class="eyebrow">${isNew ? 'NOVA AVALIAÇÃO' : 'EDITAR AVALIAÇÃO'}</span><h1>${isNew ? 'Vamos preparar o teste.' : escapeHtml(quiz.title || 'Editar teste')}</h1></div><button class="button ghost" type="button" data-action="navigate" data-view="dashboard">← Voltar</button></div><div class="editor-layout"><div class="editor-main"><section class="editor-card"><div class="card-heading"><div><h2>Informações do teste</h2><p>O básico para o participante saber o que esperar.</p></div><span class="pill">01 / CONFIGURAÇÃO</span></div><div class="field"><label for="quiz-title">Nome do teste</label><input class="input" id="quiz-title" data-editor-field="title" maxlength="90" value="${escapeHtml(quiz.title)}" placeholder="Ex.: Avaliação inicial — atendimento"></div><div class="field"><label for="quiz-instructions">Instruções para o participante <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><textarea class="textarea" id="quiz-instructions" data-editor-field="instructions" maxlength="600" placeholder="Explique como responder, o que pode consultar e qualquer contexto importante…">${escapeHtml(quiz.instructions || '')}</textarea></div><div class="field-grid"><div class="field"><span class="field-label">Formato</span><div class="field-hint">Questões objetivas com gabarito e perguntas abertas na mesma avaliação.</div></div><div class="field"><label for="quiz-duration">Tempo total</label><div class="duration-input"><input class="input" id="quiz-duration" type="number" min="1" max="180" step="1" data-editor-field="durationMinutes" value="${Number(quiz.durationMinutes) || 20}"><span>min</span></div></div></div></section><section><div class="question-section-heading"><div><h2>Perguntas</h2><p>${quiz.questions.length} ${quiz.questions.length === 1 ? 'pergunta na sequência' : 'perguntas na sequência'}</p></div><button class="button secondary small" type="button" data-action="add-question"><span class="button-icon">＋</span>Adicionar pergunta</button></div><div class="question-stack">${quiz.questions.map(renderQuestionEditor).join('')}</div><button class="button secondary wide add-question-bottom" type="button" data-action="add-question"><span class="button-icon" aria-hidden="true">＋</span>Adicionar pergunta</button></section><div class="editor-savebar"><p>Salvo na sua conta. O link compartilhado não revela o gabarito.</p><div class="editor-save-actions"><button class="button secondary" type="button" data-action="save-editor">Salvar teste</button><button class="button primary" type="button" data-action="save-share"><span class="button-icon">↗</span>Salvar e compartilhar</button></div></div></div><aside class="editor-aside"><div class="editor-aside-card"><h3>Uma configuração pequena, mas suficiente.</h3><ul class="editor-checklist"><li><span class="check-dot">✓</span><span>Selecione múltipla escolha ou resposta livre em cada pergunta.</span></li><li><span class="check-dot">✓</span><span>Marque a resposta correta nas perguntas objetivas.</span></li><li><span class="check-dot">✓</span><span>O cronômetro vale para o teste todo e entrega ao chegar a zero.</span></li><li><span class="check-dot">✓</span><span>Faça uma prévia antes de copiar o link.</span></li></ul></div><div class="editor-aside-card"><h3>Gabarito protegido no link</h3><p>O arquivo/link enviado ao participante contém enunciados e alternativas, mas não as respostas corretas. O gabarito fica protegido na conta do avaliador.</p></div></aside></div>`;
   return shell(content, 'dashboard');
 }
 function updateEditorValue(target) {
@@ -279,7 +292,7 @@ function decodeBase64Url(value) {
 function validateQuiz(quiz) {
   return quiz && typeof quiz.id === 'string' && typeof quiz.title === 'string' && Array.isArray(quiz.questions) && quiz.questions.length > 0 && quiz.questions.every(q => typeof q.id === 'string' && typeof q.text === 'string' && ['multiple', 'free'].includes(q.type));
 }
-async function shareQuiz(quiz) {
+async function shareQuiz(quiz, button) {
   const issue = questionIssues(quiz);
   if (issue) { toast(issue, 'error'); return; }
   const url = new URL(window.location.href);
@@ -289,6 +302,11 @@ async function shareQuiz(quiz) {
   url.searchParams.set('test', quiz.shareToken);
   try {
     await navigator.clipboard.writeText(url.toString());
+    if (button) {
+      const original = button.innerHTML;
+      button.textContent = 'Link copiado ✓'; button.classList.add('copied');
+      setTimeout(() => { button.innerHTML = original; button.classList.remove('copied'); }, 2500);
+    }
     toast('Link copiado. O gabarito não vai junto.');
   } catch {
     window.prompt('Copie o link do teste:', url.toString());
@@ -339,13 +357,13 @@ function upsertAttempt() {
   }
 }
 function savedStatus() {
-  if (state.previewMode) return 'Prévia: respostas não são salvas.';
+  if (state.previewMode) return '';
   if (!state.localSaved) return 'Não foi possível salvar. Mantenha esta página aberta e baixe o comprovante ao finalizar.';
-  return navigator.onLine === false ? 'Respostas salvas neste navegador · Sem conexão. A entrega exige internet.' : 'Respostas salvas neste navegador · Envio ao finalizar.';
+  return navigator.onLine === false ? 'Respostas salvas neste navegador · Sem conexão. A entrega exige internet.' : '';
 }
 function updateSavedStatus() {
   const node = document.querySelector('#saved-status');
-  if (node) { node.textContent = savedStatus(); node.classList.toggle('save-error', !state.localSaved); }
+  if (node) { node.textContent = savedStatus(); node.classList.toggle('save-error', !state.localSaved); node.hidden = !savedStatus(); }
 }
 function restoreAttempt(saved) {
   const attempt = saved?.attempt;
@@ -364,7 +382,6 @@ function recordFocusEvent(type) {
   if (prior && now - new Date(prior.at).getTime() < 1_300) return;
   state.attempt.events.push({ id: uid(), type, at: new Date(now).toISOString(), elapsedSeconds: Math.round((now - new Date(state.attempt.startedAt).getTime()) / 1000) });
   upsertAttempt();
-  toast(`Sinal registrado: ${eventLabel(type).toLowerCase()}.`);
 }
 function eventLabel(type) {
   return ({ tab_hidden: 'Aba ocultada ou página minimizada', window_blur: 'Janela perdeu o foco', outside_click: 'Clique fora da área do teste' })[type] || 'Sinal de foco';
@@ -390,8 +407,6 @@ function updateExamIndicators() {
   }).length;
   const answeredNode = document.querySelector('#answered-count');
   if (answeredNode) answeredNode.textContent = `${answered} de ${state.activeQuiz.questions.length} respondidas`;
-  const focusCount = document.querySelector('#focus-count');
-  if (focusCount) focusCount.textContent = state.attempt.events.length ? `${state.attempt.events.length} ${state.attempt.events.length === 1 ? 'sinal de foco registrado' : 'sinais de foco registrados'}` : 'Suas respostas são salvas durante a avaliação.';
   const meter = document.querySelector('#exam-progress-percent');
   if (meter) meter.textContent = `${Math.round((answered / state.activeQuiz.questions.length) * 100)}%`;
   document.querySelectorAll('[data-jump]').forEach(button => {
@@ -399,7 +414,11 @@ function updateExamIndicators() {
     const answer = state.attempt.responses[q.id];
     const hasAnswer = typeof answer === 'string' ? answer.trim().length > 0 : Boolean(answer);
     button.classList.toggle('answered', hasAnswer);
-    button.classList.toggle('current', Number(button.dataset.jump) === state.examIndex);
+    const current = Number(button.dataset.jump) === state.examIndex;
+    button.classList.toggle('current', current);
+    button.setAttribute('aria-current', current ? 'step' : 'false');
+    const label = `Pergunta ${Number(button.dataset.jump) + 1} · ${hasAnswer ? 'Respondida' : 'Em branco'}${current ? ' · Atual' : ''}`;
+    button.setAttribute('aria-label', label); button.setAttribute('title', label);
   });
 }
 function renderIntro() {
@@ -413,11 +432,10 @@ function renderExam() {
   const question = quiz.questions[state.examIndex];
   const answer = state.attempt.responses[question.id] || '';
   const remaining = Math.max(0, Math.ceil((state.attempt.deadline - Date.now()) / 1000));
-  const count = eventCounts(state.attempt).total;
   const choices = question.type === 'multiple'
     ? `<div class="answer-list">${question.options.map(option => `<button class="answer-choice ${answer === option.letter ? 'selected' : ''}" data-action="select-answer" data-answer="${escapeHtml(option.letter)}" type="button" aria-pressed="${answer === option.letter}"><span class="option-letter">${escapeHtml(option.letter)}</span><span class="answer-choice-text">${escapeHtml(option.text)}</span><span class="selected-check" aria-hidden="true">✓</span></button>`).join('')}</div>`
     : `<div class="response-area"><label class="field-label" for="free-response">Sua resposta</label><textarea id="free-response" class="textarea" maxlength="5000" placeholder="Escreva sua resposta aqui…">${escapeHtml(answer)}</textarea></div>`;
-  const content = `<div class="exam-page"><header class="exam-topline">${brand(true)}<span class="exam-title-mini">${escapeHtml(quiz.title)}</span><div class="exam-clock" id="exam-clock"><span class="clock-indicator"></span><strong>${formatTime(remaining)}</strong><span>restantes</span></div></header><main class="exam-stage"><section class="exam-card"><div class="exam-progress-head"><span>PERGUNTA ${String(state.examIndex + 1).padStart(2, '0')} / ${String(quiz.questions.length).padStart(2, '0')}</span><strong id="exam-progress-percent">0%</strong></div><div class="progress-segments" aria-label="Navegue entre as perguntas">${quiz.questions.map((q, index) => `<button class="progress-segment ${index === state.examIndex ? 'current' : ''}" data-jump="${index}" type="button" title="Ir para pergunta ${index + 1}" aria-label="Pergunta ${index + 1}"></button>`).join('')}</div><div id="answered-count" class="hidden">0 de ${quiz.questions.length} respondidas</div><div class="question-kicker">${question.type === 'multiple' ? 'ESCOLHA UMA ALTERNATIVA' : 'RESPOSTA ABERTA'}</div><h1 class="exam-question">${escapeHtml(question.text)}</h1>${question.type === 'multiple' ? '<p class="exam-hint">Selecione a opção que melhor responde à pergunta.</p>' : '<p class="exam-hint">Responda com suas próprias palavras.</p>'}${choices}<p id="saved-status" class="save-status ${state.localSaved ? '' : 'save-error'}" role="status">${savedStatus()}</p><div class="exam-controls"><span class="exam-controls-note">${count ? `${count} ${count === 1 ? 'sinal de foco registrado' : 'sinais de foco registrados'}` : 'Suas respostas são salvas durante a avaliação.'}</span><div class="exam-control-actions">${state.examIndex > 0 ? '<button class="button secondary" data-action="exam-previous" type="button">← Anterior</button>' : ''}${state.examIndex < quiz.questions.length - 1 ? '<button class="button primary" data-action="exam-next" type="button">Próxima pergunta →</button>' : '<button class="button primary" data-action="exam-submit" type="button">Revisar respostas →</button>'}</div></div></section></main><p class="exam-lower-note">O cronômetro corre continuamente. Se o tempo terminar, a avaliação será enviada automaticamente. Se precisar, use os segmentos acima para voltar a uma pergunta.</p></div>`;
+  const content = `<div class="exam-page"><header class="exam-topline">${brand(true)}<span class="exam-title-mini">${escapeHtml(quiz.title)}</span><div class="exam-clock" id="exam-clock"><span class="clock-indicator"></span><strong>${formatTime(remaining)}</strong><span>restantes</span></div></header><main class="exam-stage"><section class="exam-card"><div class="exam-progress-head"><span>PERGUNTA ${String(state.examIndex + 1).padStart(2, '0')} / ${String(quiz.questions.length).padStart(2, '0')}</span><strong id="exam-progress-percent">0%</strong></div><div class="progress-segments" aria-label="Navegue entre as perguntas">${quiz.questions.map((q, index) => `<button class="progress-segment ${index === state.examIndex ? 'current' : ''}" data-jump="${index}" type="button" title="Ir para pergunta ${index + 1}" aria-label="Pergunta ${index + 1}">${index + 1}</button>`).join('')}</div><div class="navigation-details"><span id="answered-count" class="navigation-summary">${quiz.questions.filter(q => String(state.attempt.responses[q.id] || '').trim()).length} de ${quiz.questions.length} respondidas</span><div class="navigation-legend"><span><i class="legend-current" aria-hidden="true"></i>Atual</span><span><i class="legend-answered" aria-hidden="true"></i>Respondida</span><span><i class="legend-empty" aria-hidden="true"></i>Em branco</span></div></div><div class="question-kicker">${question.type === 'multiple' ? 'ESCOLHA UMA ALTERNATIVA' : 'RESPOSTA ABERTA'}</div><h1 class="exam-question">${escapeHtml(question.text)}</h1>${question.type === 'multiple' ? '<p class="exam-hint">Selecione a opção que melhor responde à pergunta.</p>' : '<p class="exam-hint">Responda com suas próprias palavras.</p>'}${choices}<p id="saved-status" ${savedStatus() ? '' : 'hidden'} class="save-status ${state.localSaved ? '' : 'save-error'}" role="status">${savedStatus()}</p><div class="exam-controls"><div class="exam-control-actions">${state.examIndex > 0 ? '<button class="button secondary" data-action="exam-previous" type="button">← Anterior</button>' : ''}${state.examIndex < quiz.questions.length - 1 ? '<button class="button primary" data-action="exam-next" type="button">Próxima pergunta →</button>' : '<button class="button primary" data-action="exam-submit" type="button">Revisar respostas →</button>'}</div></div></section></main><p class="exam-lower-note">O cronômetro corre continuamente. Se o tempo terminar, a avaliação será enviada automaticamente. Se precisar, use os números acima para ir direto a uma pergunta.</p></div>`;
   app.innerHTML = content;
   updateExamIndicators();
   startExamTimer();
@@ -440,7 +458,7 @@ function renderReview() {
     const option = q.type === 'multiple' ? q.options.find(o => o.letter === answer) : null;
     return `<article class="review-answer"><header><span class="question-kicker">PERGUNTA ${String(index+1).padStart(2,'0')} · ${q.type === 'multiple' ? 'OBJETIVA' : 'ABERTA'}</span><button class="button secondary small" data-action="review-edit" data-index="${index}" aria-label="Editar resposta da pergunta ${index+1}" type="button">Editar ↗</button></header><h2>${escapeHtml(q.text)}</h2><div class="review-response"><span class="review-response-label">SUA RESPOSTA</span><p>${answer.trim() ? (option ? '<span class="review-letter">'+escapeHtml(option.letter)+'</span>'+escapeHtml(option.text) : escapeHtml(answer)) : 'Sem resposta. Você pode voltar e responder antes de enviar.'}</p></div></article>`;
   }).join('');
-  app.innerHTML = `<div class="exam-page review-page"><header class="exam-topline">${brand(true)}<span class="exam-title-mini">${escapeHtml(quiz.title)}</span><div id="exam-clock" class="exam-clock"><span class="clock-indicator"></span><strong></strong><span>restantes</span></div></header><main class="review-stage"><section class="review-hero"><span class="eyebrow">ÚLTIMA ETAPA · REVISÃO</span><h1 id="review-heading" tabindex="-1">Tudo pronto para enviar?</h1><p>Confira suas escolhas e o que escreveu. Ainda dá tempo de ajustar.</p><div class="review-summary"><span class="pill blue">${answered} de ${quiz.questions.length} respondidas</span><span class="pill">${escapeHtml(state.attempt.participant)}</span></div></section>${missing ? '<div class="review-warning" role="status"><strong>'+missing+' pergunta(s) sem resposta.</strong><span>Edite as perguntas abaixo ou envie com as respostas em branco.</span></div>' : ''}<p id="saved-status" class="save-status ${state.localSaved ? '' : 'save-error'}" role="status">${savedStatus()}</p><section class="review-answers" aria-label="Suas perguntas e respostas">${cards}</section><footer class="review-footer"><div><strong>Este é o envio final.</strong><p>Após enviar, suas respostas não poderão ser alteradas. O tempo continua correndo.</p></div><div class="exam-control-actions"><button class="button secondary" data-action="review-back" type="button">← Voltar à avaliação</button><button class="button primary review-send" data-action="review-send" type="button">Confirmar e enviar ↗</button></div></footer></main></div>`;
+  app.innerHTML = `<div class="exam-page review-page"><header class="exam-topline">${brand(true)}<span class="exam-title-mini">${escapeHtml(quiz.title)}</span><div id="exam-clock" class="exam-clock"><span class="clock-indicator"></span><strong></strong><span>restantes</span></div></header><main class="review-stage"><section class="review-hero"><span class="eyebrow">ÚLTIMA ETAPA · REVISÃO</span><h1 id="review-heading" tabindex="-1">Tudo pronto para enviar?</h1><p>Confira suas escolhas e o que escreveu. Ainda dá tempo de ajustar.</p><div class="review-summary"><span class="pill blue">${answered} de ${quiz.questions.length} respondidas</span><span class="pill">${escapeHtml(state.attempt.participant)}</span></div></section>${missing ? '<div class="review-warning" role="status"><strong>'+missing+' pergunta(s) sem resposta.</strong><span>Edite as perguntas abaixo ou envie com as respostas em branco.</span></div>' : ''}<p id="saved-status" ${savedStatus() ? '' : 'hidden'} class="save-status ${state.localSaved ? '' : 'save-error'}" role="status">${savedStatus()}</p><section class="review-answers" aria-label="Suas perguntas e respostas">${cards}</section><footer class="review-footer"><div><strong>Este é o envio final.</strong><p>Após enviar, suas respostas não poderão ser alteradas. O tempo continua correndo.</p></div><div class="exam-control-actions"><button class="button secondary" data-action="review-back" type="button">← Voltar à avaliação</button><button class="button primary review-send" data-action="review-send" type="button">Confirmar e enviar ↗</button></div></footer></main></div>`;
   updateExamIndicators(); startExamTimer();
 }
 async function finishAttempt(reason = 'manual') {
@@ -507,10 +525,10 @@ function correctCount(attempt) {
 }
 function renderResults() {
   const list = sortAttempts();
-  const content = `<section class="page-intro"><div><span class="eyebrow">REVISÃO COM CONTEXTO</span><h1>As respostas,<br><em>sem ruído.</em></h1><p>Veja o que foi respondido, revise as questões abertas e consulte os sinais de foco. As respostas enviadas pelo link aparecem aqui. Use Atualizar para buscar novas entregas.</p></div><aside class="hero-aside"><span class="aside-number">${String(list.length).padStart(2, '0')} / TENTATIVAS</span><strong>Resultados online</strong><p>As entregas ficam na sua conta. Exporte quando precisar de uma cópia.</p></aside></section>${list.length ? `<div class="result-list">${list.map(attempt => {
+  const content = `<section class="page-intro"><div><span class="eyebrow">REVISÃO COM CONTEXTO</span><h1>As respostas,<br><em>sem ruído.</em></h1><p>Veja o que foi respondido, revise as questões abertas e consulte os sinais de foco. As respostas enviadas pelo link aparecem aqui. Use Atualizar para buscar novas entregas.</p></div><aside class="hero-aside"><span class="aside-number">${String(list.length).padStart(2, '0')} / TENTATIVAS</span><strong>Resultados online</strong><p>As entregas ficam na sua conta. Exporte quando precisar de uma cópia.</p></aside></section>${list.length ? `${searchField('Buscar participante ou avaliação')}<div class="result-list">${list.map(attempt => {
     const counts = eventCounts(attempt);
     const score = correctCount(attempt);
-    return `<article class="result-row"><div><h3>${escapeHtml(attempt.participant || 'Participante')} <span class="pill">${score.available ? `${score.correct}/${score.available} OBJETIVAS` : 'SEM GABARITO LOCAL'}</span></h3><p>${escapeHtml(attempt.quizTitle || displayTestName(attempt.quizId))} · ${formatDate(attempt.submittedAt || attempt.startedAt)} · ${formatTime(elapsedSeconds(attempt))} · ${counts.total} ${counts.total === 1 ? 'sinal' : 'sinais'} de foco</p></div><div class="test-actions"><button class="button secondary small" data-action="open-attempt" data-id="${escapeHtml(attempt.id)}" type="button">Abrir revisão →</button><button class="button danger small" data-action="delete-attempt" data-id="${escapeHtml(attempt.id)}" type="button">Excluir resultado</button></div></article>`;
+    return `<article class="result-row" data-search="${escapeHtml(`${attempt.participant || ''} ${attempt.quizTitle || displayTestName(attempt.quizId)}`)}"><div><h3>${escapeHtml(attempt.participant || 'Participante')} <span class="pill">${score.available ? `${score.correct}/${score.available} OBJETIVAS` : 'SEM GABARITO LOCAL'}</span></h3><p>${escapeHtml(attempt.quizTitle || displayTestName(attempt.quizId))} · ${formatDate(attempt.submittedAt || attempt.startedAt)} · ${formatTime(elapsedSeconds(attempt))} · ${counts.total} ${counts.total === 1 ? 'sinal' : 'sinais'} de foco</p></div><div class="test-actions"><button class="button secondary small" data-action="open-attempt" data-id="${escapeHtml(attempt.id)}" type="button">Abrir revisão →</button><button class="button danger small" data-action="delete-attempt" data-id="${escapeHtml(attempt.id)}" type="button">Excluir resultado</button></div></article>`;
   }).join('')}</div>` : `<div class="empty-state"><div class="empty-symbol">◷</div><h3>Nenhuma tentativa por enquanto.</h3><p>Compartilhe um teste salvo na sua conta. As entregas dos participantes aparecerão aqui.</p><button class="button secondary" type="button" data-action="import-file">Importar arquivo JSON</button><input id="import-file" type="file" accept="application/json,.json" multiple hidden></div>`}<div class="page-footnote"><span aria-hidden="true">i</span><span><strong>Entrega automática.</strong> Links novos enviam respostas diretamente à sua conta. A importação JSON continua disponível para dados antigos e backups.</span></div>`;
   return shell(content, 'results', topActions());
 }
@@ -532,7 +550,7 @@ function renderAttemptDetail() {
     return `<article class="response-item"><h3>${String(index + 1).padStart(2, '0')} · ${escapeHtml(question.text)}</h3><p>${escapeHtml(answerText(question, userAnswer))}</p>${status}</article>`;
   }).join('') || '<div class="no-events">Este relatório não contém o enunciado das perguntas.</div>';
   const eventPanel = events.length ? `<div class="event-list">${events.map(event => `<div class="event-row"><span class="event-mark"></span><div><strong>${escapeHtml(eventLabel(event.type))}</strong><span>${new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(event.at))} · ${formatTime(event.elapsedSeconds)} decorridos</span></div></div>`).join('')}</div>` : '<div class="no-events">Nenhum sinal foi registrado durante esta tentativa.</div>';
-  const content = `<div class="result-detail-top"><div><button class="button ghost small" data-action="navigate" data-view="results" type="button">← Todas as tentativas</button><h1>${escapeHtml(attempt.participant || 'Participante')}</h1><span class="mono-label">${escapeHtml(attempt.quizTitle || '')} · ${formatDate(attempt.submittedAt)}</span></div><button class="button secondary" data-action="download-attempt-by-id" data-id="${escapeHtml(attempt.id)}" type="button">Exportar relatório JSON</button></div><div class="result-stats"><article class="result-stat"><span>Objetivas corretas</span><strong>${score.available ? `${score.correct}/${score.available}` : '—'}</strong></article><article class="result-stat"><span>Tempo utilizado</span><strong>${formatTime(elapsedSeconds(attempt))}</strong></article><article class="result-stat"><span>Sinais de foco</span><strong>${(attempt.events || []).length}</strong></article><article class="result-stat"><span>Respondidas</span><strong>${Object.values(attempt.responses || {}).filter(value => String(value).trim()).length}/${snapshot.questions.length}</strong></article></div><div class="result-detail-grid"><section class="detail-panel"><header class="detail-panel-head"><h2>Respostas</h2><p>A revisão usa o gabarito guardado no momento da entrega.</p></header>${answerPanel}</section><section><div class="detail-panel"><header class="detail-panel-head"><h2>Linha do tempo de foco</h2><p>${events.length} ${events.length === 1 ? 'ocorrência registrada' : 'ocorrências registradas'}</p></header>${eventPanel}</div><div class="results-disclaimer"><strong>Leia com cuidado.</strong> Uma aba oculta ou perda de foco pode acontecer por notificações, troca de janela ou outros motivos. É um sinal para contextualizar — não evidência conclusiva de fraude.</div></section></div>`;
+  const content = `<div class="result-detail-top"><div><button class="button ghost small" data-action="navigate" data-view="results" type="button">← Todas as tentativas</button><h1>${escapeHtml(attempt.participant || 'Participante')}</h1><span class="mono-label">${escapeHtml(attempt.quizTitle || '')} · ${formatDate(attempt.submittedAt)}</span></div></div><div class="result-stats"><article class="result-stat"><span>Objetivas corretas</span><strong>${score.available ? `${score.correct}/${score.available}` : '—'}</strong></article><article class="result-stat"><span>Tempo utilizado</span><strong>${formatTime(elapsedSeconds(attempt))}</strong></article><article class="result-stat"><span>Sinais de foco</span><strong>${(attempt.events || []).length}</strong></article><article class="result-stat"><span>Respondidas</span><strong>${Object.values(attempt.responses || {}).filter(value => String(value).trim()).length}/${snapshot.questions.length}</strong></article></div><div class="result-detail-grid"><section class="detail-panel"><header class="detail-panel-head"><h2>Respostas</h2><p>A revisão usa o gabarito guardado no momento da entrega.</p></header>${answerPanel}</section><section><div class="detail-panel"><header class="detail-panel-head"><h2>Linha do tempo de foco</h2><p>${events.length} ${events.length === 1 ? 'ocorrência registrada' : 'ocorrências registradas'}</p></header>${eventPanel}</div><div class="results-disclaimer"><strong>Leia com cuidado.</strong> Uma aba oculta ou perda de foco pode acontecer por notificações, troca de janela ou outros motivos. É um sinal para contextualizar — não evidência conclusiva de fraude.</div></section></div>`;
   return shell(content, 'results');
 }
 function renderGuide() {
@@ -622,14 +640,45 @@ async function importFiles(files) {
   if (errors) parts.push(`${errors} arquivo(s) ignorado(s)`);
   toast(parts.length ? parts.join(' · ') : 'Nenhum dado compatível foi encontrado.', errors ? 'error' : '');
 }
+function navigateQuestion(index) {
+  if (state.view !== 'exam' || state.questionAnimating) return;
+  const next = Math.max(0, Math.min(state.activeQuiz.questions.length - 1, index));
+  if (next === state.examIndex) return;
+  const direction = next > state.examIndex ? 1 : -1;
+  const card = document.querySelector('.exam-card');
+  const animate = card?.animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const outgoing = animate ? card.cloneNode(true) : null;
+  state.examIndex = next; render();
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  if (!outgoing) return;
+  outgoing.classList.add('question-outgoing');
+  outgoing.setAttribute('aria-hidden', 'true'); outgoing.inert = true;
+  outgoing.querySelectorAll('[id]').forEach(node => node.removeAttribute('id'));
+  const stage = document.querySelector('.exam-stage');
+  const incoming = stage.querySelector('.exam-card');
+  stage.append(outgoing);
+  state.questionAnimating = true;
+  const options = { duration: 250, easing: 'cubic-bezier(.22, 1, .36, 1)', fill: 'both' };
+  const exit = outgoing.animate([{ opacity: 1, transform: 'scale(1) translateY(0)' }, { opacity: 0, transform: `scale(.95) translateY(${-direction * 16}px)` }], options);
+  const entry = incoming.animate([{ opacity: 0, transform: `translateY(${direction * 32}px) scale(.98)` }, { opacity: 1, transform: 'translateY(0) scale(1)' }], options);
+  Promise.allSettled([exit.finished, entry.finished]).finally(() => { outgoing.remove(); entry.cancel(); state.questionAnimating = false; });
+}
 async function handleClick(event) {
   const actionButton = event.target.closest('[data-action]');
   const jump = event.target.closest('[data-jump]');
-  if (jump && state.view === 'exam') { state.examIndex = Number(jump.dataset.jump); render(); return; }
+  if (jump && state.view === 'exam') { navigateQuestion(Number(jump.dataset.jump)); return; }
   if (!actionButton) return;
   const { action, id, view, qid, letter } = actionButton.dataset;
   if (action === 'navigate') { state.selectedAttemptId = null; await navigate(view); }
-  else if (action === 'go-dashboard') { state.view = 'dashboard'; state.selectedAttemptId = null; render(); if (state.user) await loadAccount(); }
+  else if (action === 'go-dashboard') {
+    event.preventDefault();
+    const url = new URL(window.location.href);
+    url.searchParams.delete('test');
+    url.searchParams.delete('take');
+    url.hash = '';
+    window.history.replaceState(null, '', url.toString());
+    state.view = 'dashboard'; state.selectedAttemptId = null; render(); if (state.user) await loadAccount();
+  }
   else if (action === 'refresh-results') await loadAccount();
   else if (action === 'migrate-local') await migrateLocal();
   else if (action === 'delete-attempt') await deleteAttempt(id);
@@ -659,9 +708,16 @@ async function handleClick(event) {
     if (await saveEditor()) { state.view = 'dashboard'; render(); toast('Teste salvo na sua conta.'); }
   }
   else if (action === 'save-share') await saveEditorAndShare();
-  else if (action === 'share-test') await shareQuiz(state.tests.find(test => test.id === id));
+  else if (action === 'share-test') await shareQuiz(state.tests.find(test => test.id === id), actionButton);
   else if (action === 'preview-test') beginTest(state.tests.find(test => test.id === id), true);
-  else if (action === 'test-menu') document.querySelector(`#extra-${CSS.escape(id)}`)?.classList.toggle('hidden');
+  else if (action === 'test-menu') {
+    const panel = document.getElementById(actionButton.getAttribute('aria-controls'));
+    if (!panel) return;
+    const open = actionButton.getAttribute('aria-expanded') !== 'true';
+    actionButton.setAttribute('aria-expanded', String(open));
+    panel.inert = !open;
+    panel.classList.toggle('is-open', open);
+  }
   else if (action === 'duplicate-test') {
     const original = state.tests.find(test => test.id === id);
     if (original) { const copy = clone(original); copy.id = uid(); delete copy.shareToken; copy.title = `${copy.title.slice(0, 82)} — cópia`; copy.isExample = false; copy.createdAt = copy.updatedAt = new Date().toISOString(); state.tests.unshift(await saveQuiz(copy)); render(); toast('Cópia criada.'); }
@@ -695,8 +751,8 @@ async function handleClick(event) {
     });
     updateExamIndicators();
   }
-  else if (action === 'exam-previous') { state.examIndex = Math.max(0, state.examIndex - 1); render(); }
-  else if (action === 'exam-next') { state.examIndex = Math.min(state.activeQuiz.questions.length - 1, state.examIndex + 1); render(); }
+  else if (action === 'exam-previous') navigateQuestion(state.examIndex - 1);
+  else if (action === 'exam-next') navigateQuestion(state.examIndex + 1);
   else if (action === 'exam-submit' && state.view === 'exam') { state.view = 'review'; render(); window.scrollTo({top:0}); document.querySelector('#review-heading')?.focus(); }
   else if (action === 'review-edit' && state.view === 'review') { state.examIndex = Number(actionButton.dataset.index); state.view = 'exam'; render(); window.scrollTo({top:0}); }
   else if (action === 'review-back' && state.view === 'review') { state.view = 'exam'; render(); window.scrollTo({top:0}); }
@@ -707,7 +763,7 @@ document.addEventListener('click', event => {
   const button = event.target.closest('[data-action]');
   if (button?.disabled) return;
   if (button) button.disabled = true;
-  if (button && ['save-editor','save-share','duplicate-test','delete-test','delete-attempt','migrate-local','retry-submit'].includes(button.dataset.action)) {
+  if (button && ['save-editor','save-share','duplicate-test','delete-test','delete-attempt','migrate-local','retry-submit','review-send','share-test'].includes(button.dataset.action)) {
     button.classList.add('is-busy'); button.setAttribute('aria-busy', 'true');
   }
   handleClick(event).catch(error => {
@@ -716,6 +772,7 @@ document.addEventListener('click', event => {
   }).finally(() => { if (button) { button.disabled = false; button.classList.remove('is-busy'); button.removeAttribute('aria-busy'); } });
 });
 document.addEventListener('input', event => {
+  if (event.target.id === 'list-search') filterList(event.target.value);
   if (state.view === 'editor' && (event.target.matches('[data-editor-field]') || event.target.matches('[data-qprompt]') || event.target.matches('[data-option]'))) updateEditorValue(event.target);
   if (state.view === 'exam' && event.target.id === 'free-response' && state.attempt) {
     const question = state.activeQuiz.questions[state.examIndex];

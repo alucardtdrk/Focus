@@ -127,7 +127,7 @@ assert.equal(run('state.view'), 'review');
 assert.equal(run('state.examIndex'), 2);
 assert.equal(run('state.attempt.deadline'), originalDeadline);
 assert.equal(run("state.attempt.responses['ex-q3']"), 'Resposta preservada');
-assert.match(root.innerHTML, /Respostas salvas neste navegador/);
+assert.doesNotMatch(root.innerHTML, /Respostas salvas neste navegador|sinais? de foco registrado|Sinal registrado/);
 const originalSetItem = context.localStorage.setItem;
 context.localStorage.setItem = () => { throw new Error('storage full'); };
 run('render()');
@@ -156,3 +156,95 @@ assert.equal(run('state.examIndex'), 1);
 assert.equal(run('state.attempt.deadline'), legacyDeadline);
 assert.equal(run("state.attempt.responses['ex-q1']"), 'A');
 console.log('Retomada de links antigos OK');
+
+run("state.previewMode=true; state.activeQuiz=EXAMPLE; state.attempt.responses={'ex-q1':'A','ex-q3':'   '}; state.examIndex=1; state.view='exam'; render();");
+assert.match(root.innerHTML, /data-jump="0"[^>]*>1</);
+assert.match(root.innerHTML, /id="answered-count" class="navigation-summary"/);
+const navButtons = [0,1,2].map(index => ({dataset:{jump:String(index)}, classes:{}, attrs:{}, classList:{toggle(name,value){this.owner.classes[name]=value;}}, setAttribute(name,value){this.attrs[name]=value;}}));
+navButtons.forEach(button => {button.classList.owner=button;});
+const oldQueryAll=context.document.querySelectorAll;
+context.document.querySelectorAll=selector => selector === '[data-jump]' ? navButtons : [];
+run('updateExamIndicators()');
+assert.equal(navButtons[0].classes.answered,true);
+assert.equal(navButtons[1].classes.current,true);
+assert.equal(navButtons[1].attrs['aria-current'],'step');
+assert.match(navButtons[2].attrs['aria-label'],/Em branco/);
+await run("handleClick({target:{closest: selector => selector === '[data-jump]' ? {dataset:{jump:'2'}} : null}})");
+assert.equal(run('state.examIndex'),2);
+context.document.querySelectorAll=oldQueryAll;
+console.log('Navegação numerada, estados acessíveis e salto direto OK');
+
+const originalToast = run('toast');
+let focusToast = false;
+context.testToast = () => { focusToast = true; };
+run("toast=testToast; state.previewMode=false; state.view='exam'; state.attempt.submittedAt=null; state.attempt.events=[]; recordFocusEvent('outside_click'); render();");
+assert.equal(run('state.attempt.events.length'),1);
+assert.equal(focusToast,false);
+assert.doesNotMatch(root.innerHTML,/Sinal registrado|sinal de foco registrado|sinais de foco registrados|Suas respostas são salvas durante/);
+context.restoreToast=originalToast;run('toast=restoreToast');
+console.log('Eventos registrados sem avisos ao participante; alertas de salvamento preservados OK');
+
+let preventedHomeClick = false;
+context.preventHomeClick = () => { preventedHomeClick = true; };
+context.window.history = { replaceState(_state, _title, value) {
+  const url = new URL(value);
+  context.window.location.href = url.href;
+  context.window.location.search = url.search;
+} };
+for (const query of ['test=12345678-1234-1234-1234-123456789abc', 'take=legacy']) {
+  context.window.location.href = 'http://localhost/?' + query + '#';
+  context.window.location.search = '?' + query;
+  run("state.user=null; state.view='participant-intro'; state.loading=false;");
+  preventedHomeClick = false;
+  await run("handleClick({preventDefault:preventHomeClick,target:{closest:selector => selector === '[data-action]' ? {dataset:{action:'go-dashboard'}} : null}})");
+  assert.equal(context.window.location.href, 'http://localhost/', 'home must clear the public exam URL');
+  assert.equal(preventedHomeClick, true, 'logo must prevent the default hash navigation');
+  assert.match(root.innerHTML, /login-form/);
+  await run('boot()');
+  assert.equal(run('state.view'), 'dashboard', 'reload must stay at evaluator home');
+}
+console.log('Logo limpa links de prova atuais e antigos; recarregar mantém o início OK');
+
+assert.equal(run("searchText('AVALIAÇÃO')"), 'avaliacao');
+const searchRows=[{dataset:{search:'Avaliação de suporte'}},{dataset:{search:'Lucas Escouto'}}];
+const searchStatus={textContent:''};
+const priorQuery=context.document.querySelector, priorQueryAll=context.document.querySelectorAll;
+context.document.querySelector=selector => selector === '#search-count' ? searchStatus : priorQuery(selector);
+context.document.querySelectorAll=selector => selector === '[data-search]' ? searchRows : priorQueryAll(selector);
+run("filterList('avaliacao')");
+assert.equal(searchRows[0].hidden,false);assert.equal(searchRows[1].hidden,true);
+run("filterList('inexistente')");assert.match(searchStatus.textContent,/Nenhum resultado/);
+run("filterList('')");assert.ok(searchRows.every(row=>!row.hidden));
+context.document.querySelector=priorQuery;context.document.querySelectorAll=priorQueryAll;
+const copyButton={innerHTML:'Copiar link',textContent:'',classList:{add(){},remove(){}}};
+context.copyButton=copyButton;
+await run("shareQuiz({...EXAMPLE,shareToken:'12345678-1234-1234-1234-123456789abc'},copyButton)");
+assert.equal(copyButton.textContent,'Link copiado ✓');
+run("state.tests=[EXAMPLE];state.user={id:'owner'};state.view='dashboard';render()");
+assert.match(root.innerHTML,/Buscar avaliações/);assert.match(root.innerHTML,/test-card-icon/);
+console.log('Busca sem acentos, filtros, cards e confirmação de cópia OK');
+
+run("state.previewMode=true; state.view='exam'; state.activeQuiz=EXAMPLE; state.examIndex=0; state.questionAnimating=false; navigateQuestion(1)");
+assert.equal(run('state.examIndex'),1);
+run('navigateQuestion(0)');assert.equal(run('state.examIndex'),0);
+run('state.questionAnimating=true; navigateQuestion(2)');assert.equal(run('state.examIndex'),0);
+run('state.questionAnimating=false; navigateQuestion(99)');assert.equal(run('state.examIndex'),2);
+console.log('Navegação de cards: avanço, retorno, limites e bloqueio de cliques rápidos OK');
+
+const scrolls=[];
+context.window.scrollTo=options=>scrolls.push(options);
+run("state.view='exam'; state.examIndex=0; navigateQuestion(1); navigateQuestion(0); navigateQuestion(2)");
+assert.equal(scrolls.length,3);
+assert.ok(scrolls.every(options=>options.top===0 && options.behavior==='instant'));
+console.log('Avançar, voltar e saltar pergunta retornam ao início da página OK');
+
+const disclosure={inert:true,classList:{toggle(name,value){disclosure.open=value;}}};
+const disclosureButton={dataset:{action:'test-menu'},attrs:{'aria-controls':'extra-demo','aria-expanded':'false'},getAttribute(name){return this.attrs[name];},setAttribute(name,value){this.attrs[name]=value;}};
+context.document.getElementById=id=>id==='extra-demo'?disclosure:null;
+context.disclosureButton=disclosureButton;
+const disclosureEvent="({target:{closest:selector=>selector==='[data-action]'?disclosureButton:null}})";
+await run('handleClick('+disclosureEvent+')');
+assert.equal(disclosure.open,true);assert.equal(disclosure.inert,false);assert.equal(disclosureButton.attrs['aria-expanded'],'true');
+await run('handleClick('+disclosureEvent+')');
+assert.equal(disclosure.open,false);assert.equal(disclosure.inert,true);assert.equal(disclosureButton.attrs['aria-expanded'],'false');
+console.log('Painel expansível: abertura, fechamento e acessibilidade OK');

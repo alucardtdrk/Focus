@@ -28,3 +28,26 @@ assert.equal(root.dataset.theme, 'light');
 events.storage({ key: 'foco.theme.v1', newValue: 'dark' });
 assert.equal(root.dataset.theme, 'dark');
 console.log('Tema: preferência do sistema, alternância, persistência e acessibilidade OK');
+
+assert.equal(button.attributes['data-tooltip'], 'Ativar modo claro');
+assert.equal(button.attributes.title, undefined);
+console.log('Dica de tema única e sincronizada OK');
+
+let transitions = 0;
+let completeTransition;
+root.style = {setProperty(){}};
+context.window.innerWidth=1280;context.window.innerHeight=800;
+context.window.matchMedia = query => ({matches: false});
+button.getBoundingClientRect=()=>({left:20,top:20,width:38,height:38});
+context.document.startViewTransition=callback=>{ transitions++;callback();return {finished:new Promise(resolve=>{completeTransition=resolve;})}; };
+events.click({target:{closest:()=>button}});
+assert.equal(transitions,1);
+assert.equal(root.dataset.theme,'light');
+events.click({target:{closest:()=>button}});
+assert.equal(transitions,1,'rapid clicks must not overlap transitions');
+completeTransition();await new Promise(resolve=>setImmediate(resolve));
+context.window.matchMedia=()=>({matches:true});
+events.click({target:{closest:()=>button}});
+assert.equal(transitions,1,'reduced motion skips the animation');
+assert.equal(root.dataset.theme,'dark');
+console.log('Transição circular, cliques rápidos e movimento reduzido OK');
