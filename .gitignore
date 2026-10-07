@@ -1,0 +1,12 @@
+dist/
+tests/.postgres-check/
+.env
+.env.*
+!.env.example
+.vercel/
+supabase/
+SETUP.md
+TODO.md
+plan.md
+supabase-design.md
+supabase-plan.md
