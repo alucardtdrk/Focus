@@ -43,8 +43,8 @@ begin
  report := report || jsonb_build_object('submittedAt',clock_timestamp(),'submissionReason','manual','responses','{"q1":"B"}'::jsonb);
  assert public.foco_submit(link_token,first->>'revision',report), 'Envio recusado';
  assert public.foco_submit(link_token,first->>'revision',report), 'Reenvio não idempotente';
- assert (select count(*) = 1 from public.foco_attempts), 'Resultado duplicado';
- assert (select data->'responses'->>'q1' = 'A' and data->>'submissionReason' = 'time' from public.foco_attempts), 'Prazo não aplicado no servidor';
+ assert (select count(*) = 1 from public.foco_attempts where quiz_id = 'check-test'), 'Resultado duplicado';
+ assert (select data->'responses'->>'q1' = 'A' and data->>'submissionReason' = 'time' from public.foco_attempts where id = report->>'id'), 'Prazo não aplicado no servidor';
  begin
   perform public.foco_public_test(link_token);
   raise exception 'Link finalizado reaberto';
@@ -63,7 +63,7 @@ begin
  perform public.foco_start(active,'Ainda respondendo');
  assert public.foco_save(expired,first->'attempt' || '{"responses":{"q1":"A"}}'), 'Resposta inicial não salva';
  deadline := to_timestamp(floor(extract(epoch from clock_timestamp()) * 1000) / 1000) - interval '1 second';
- update public.foco_links set attempt = attempt || jsonb_build_object('deadline',extract(epoch from deadline)*1000) where token = expired;
+ update public.foco_links set attempt = attempt || jsonb_build_object('startedAt',deadline - interval '1 minute','deadline',extract(epoch from deadline)*1000) where token = expired;
  perform public.foco_finish_expired();
  assert (select data->'responses'->>'q1' = 'A' and data->>'submissionReason' = 'time'
    and (data->>'submittedAt')::timestamptz = deadline and data->>'snapshotLocked' = 'true'
