@@ -1,4 +1,4 @@
--- Run after setup.sql. Everything is rolled back, including the two test users.
+-- Run after finish-expired.sql. Everything is rolled back, including the two test users.
 begin;
 insert into auth.users(id,email) values
   ('70000000-0000-4000-8000-000000000001','foco-check-one@example.invalid'),
@@ -51,5 +51,28 @@ begin
  exception when raise_exception then
   if sqlerrm <> 'Esta avaliação já foi finalizada.' then raise; end if;
  end;
+end $$;
+do $$
+declare expired uuid; active uuid; first jsonb; deadline timestamptz;
+begin
+ assert not has_function_privilege('anon','public.foco_finish_expired()','execute'), 'Finalizador acessível publicamente';
+ assert not has_function_privilege('authenticated','public.foco_finish_expired()','execute'), 'Finalizador acessível ao avaliador';
+ expired := public.foco_create_link('check-test');
+ active := public.foco_create_link('check-test');
+ first := public.foco_start(expired,'Notebook em repouso');
+ perform public.foco_start(active,'Ainda respondendo');
+ assert public.foco_save(expired,first->'attempt' || '{"responses":{"q1":"A"}}'), 'Resposta inicial não salva';
+ deadline := to_timestamp(floor(extract(epoch from clock_timestamp()) * 1000) / 1000) - interval '1 second';
+ update public.foco_links set attempt = attempt || jsonb_build_object('deadline',extract(epoch from deadline)*1000) where token = expired;
+ perform public.foco_finish_expired();
+ assert (select data->'responses'->>'q1' = 'A' and data->>'submissionReason' = 'time'
+   and (data->>'submittedAt')::timestamptz = deadline and data->>'snapshotLocked' = 'true'
+   from public.foco_attempts where id = first->'attempt'->>'id'), 'Encerramento sem navegador incorreto';
+ assert (select attempt->>'submittedAt' is null from public.foco_links where token = active), 'Tentativa ativa encerrada antes do prazo';
+ assert public.foco_submit(expired,first->>'revision',first->'attempt' || jsonb_build_object(
+   'submittedAt',clock_timestamp(),'submissionReason','manual','responses','{"q1":"B"}'::jsonb)), 'Reenvio após repouso recusado';
+ perform public.foco_finish_expired();
+ assert (select count(*) = 1 and bool_and(data->'responses'->>'q1' = 'A') from public.foco_attempts
+   where id = first->'attempt'->>'id'), 'Reenvio duplicou ou alterou respostas';
 end $$;
 rollback;

@@ -75,8 +75,8 @@ begin
   t.quiz := link.quiz; t.revision := link.revision;
   if p_attempt->>'id' is distinct from link.attempt->>'id' then raise exception 'Este link já está vinculado a outra tentativa.'; end if;
   p_attempt := p_attempt || jsonb_build_object('participant', link.attempt->'participant', 'startedAt', link.attempt->'startedAt');
-  if clock_timestamp() > to_timestamp((link.attempt->>'deadline')::numeric / 1000) then
-    p_attempt := p_attempt || jsonb_build_object('responses', link.attempt->'responses', 'submissionReason', 'time');
+  if clock_timestamp() >= to_timestamp((link.attempt->>'deadline')::numeric / 1000) then
+    p_attempt := p_attempt || jsonb_build_object('responses', link.attempt->'responses', 'events', link.attempt->'events', 'submissionReason', 'time', 'submittedAt', to_timestamp((link.attempt->>'deadline')::numeric / 1000));
   end if;
   if not found then raise exception 'Avaliação indisponível. Peça um novo link ao avaliador.'; end if;
   select * into existing from public.foco_attempts where owner_id = t.owner_id and id = p_attempt->>'id';

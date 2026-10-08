@@ -143,7 +143,9 @@ function formatTime(seconds) {
 function elapsedSeconds(attempt) {
   const start = new Date(attempt.startedAt).getTime();
   const end = new Date(attempt.submittedAt || Date.now()).getTime();
-  return Math.max(0, Math.round((end - start) / 1000));
+  const duration = Number(attempt.quizSnapshot?.durationMinutes) * 60;
+  const elapsed = Math.max(0, Math.round((end - start) / 1000));
+  return duration > 0 ? Math.min(elapsed, duration) : elapsed;
 }
 function brandMark() {
   return '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M8.4 3.5H5.8a2.3 2.3 0 0 0-2.3 2.3v2.6M15.6 3.5h2.6a2.3 2.3 0 0 1 2.3 2.3v2.6M20.5 15.6v2.6a2.3 2.3 0 0 1-2.3 2.3h-2.6M8.4 20.5H5.8a2.3 2.3 0 0 1-2.3-2.3v-2.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="2.1" fill="#D8F178"/></svg></span>';
@@ -485,7 +487,7 @@ function renderReview() {
 }
 async function finishAttempt(reason = 'manual') {
   if (!state.attempt || state.attempt.submittedAt) return;
-  state.attempt.submittedAt = new Date().toISOString();
+  state.attempt.submittedAt = new Date(reason === 'time' ? state.attempt.deadline : Date.now()).toISOString();
   state.attempt.submissionReason = reason;
   upsertAttempt();
   clearInterval(state.examTimer);

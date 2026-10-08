@@ -32,6 +32,8 @@ const context = vm.createContext({
 const source = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/gm, '').replace(/void boot\(\);\s*$/, '');
 vm.runInContext(source, context);
 const run = code => vm.runInContext(code, context);
+assert.equal(run("elapsedSeconds({startedAt:'2026-10-07T18:06:52Z',submittedAt:'2026-10-07T19:09:12Z',quizSnapshot:{durationMinutes:45}})"), 2700, 'late finalization must not inflate exam duration');
+assert.equal(run("elapsedSeconds({startedAt:'2026-10-07T18:06:52Z',submittedAt:'2026-10-07T18:16:52Z',quizSnapshot:{durationMinutes:45}})"), 600, 'early submissions keep their actual duration');
 run('render()');
 assert.match(root.innerHTML, /login-form/, 'evaluator must sign in');
 assert.match(root.innerHTML, /toggle-theme/);
@@ -107,6 +109,7 @@ assert.equal(run('state.attempt.events.length'), 1, 'review must keep tracking f
 examTick();
 assert.equal(run('state.view'), 'thanks');
 assert.equal(run('state.attempt.submissionReason'), 'time', 'review must submit when time expires');
+assert.equal(run('new Date(state.attempt.submittedAt).getTime()'), run('state.attempt.deadline'), 'automatic finalization must record the deadline even after browser suspension');
 console.log('Foco: persistência, envio e revisão de respostas OK');
 
 const receipt = run("receiptHtml({id:'receipt', participant:'<Pessoa>', quizTitle:'Teste', submittedAt:new Date().toISOString(), responses:{q:'B',free:'<script>alert(1)</script>'}, quizSnapshot:{questions:[{id:'q',text:'Escolha',type:'multiple',options:[{letter:'B',text:'Alternativa selecionada'}],correct:'A'},{id:'free',text:'Explique',type:'free'},{id:'empty',text:'Sem preenchimento',type:'free'}]}})");
